@@ -12,6 +12,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
       // Clear loading message
       activitiesList.innerHTML = "";
+      // Clear previous options to avoid duplicates
+      activitySelect.querySelectorAll("option:not([value=''])").forEach(o => o.remove());
 
       // Populate activities list
       Object.entries(activities).forEach(([name, details]) => {
@@ -25,7 +27,81 @@ document.addEventListener("DOMContentLoaded", () => {
           <p>${details.description}</p>
           <p><strong>Schedule:</strong> ${details.schedule}</p>
           <p><strong>Availability:</strong> ${spotsLeft} spots left</p>
+          <div class="participants-section">
+            <strong>Participants</strong>
+            <ul class="participants-list"></ul>
+          </div>
         `;
+
+        // Populate participants list safely
+        const participantsUl = activityCard.querySelector(".participants-list");
+        const participants = Array.isArray(details.participants) ? details.participants : [];
+        if (participants.length === 0) {
+          const li = document.createElement("li");
+          li.className = "participants-empty";
+          li.textContent = "No participants yet";
+          participantsUl.appendChild(li);
+        } else {
+          participants.forEach(p => {
+            const li = document.createElement("li");
+            li.className = "participant-item";
+
+            const avatar = document.createElement("span");
+            avatar.className = "participant-avatar";
+            // Use first letter of participant (name or email) as avatar
+            avatar.textContent = String(p).trim().charAt(0).toUpperCase();
+
+            const txt = document.createElement("span");
+            txt.textContent = p;
+
+            li.appendChild(avatar);
+            li.appendChild(txt);
+
+            // Add delete/unregister button
+            const deleteBtn = document.createElement("button");
+            deleteBtn.className = "participant-delete";
+            deleteBtn.setAttribute("aria-label", `Unregister ${p}`);
+            deleteBtn.title = "Unregister";
+            deleteBtn.textContent = "✖";
+
+            // Handle unregister click
+            deleteBtn.addEventListener("click", async (e) => {
+              e.stopPropagation();
+              deleteBtn.disabled = true;
+              try {
+                const res = await fetch(
+                  `/activities/${encodeURIComponent(name)}/unregister?email=${encodeURIComponent(p)}`,
+                  { method: "DELETE" }
+                );
+
+                const result = await res.json().catch(() => ({}));
+
+                if (res.ok) {
+                  // Remove participant from DOM
+                  li.remove();
+                  messageDiv.textContent = result.message || "Unregistered";
+                  messageDiv.className = "success";
+                  messageDiv.classList.remove("hidden");
+                  setTimeout(() => messageDiv.classList.add("hidden"), 4000);
+                } else {
+                  deleteBtn.disabled = false;
+                  messageDiv.textContent = result.detail || "Failed to unregister";
+                  messageDiv.className = "error";
+                  messageDiv.classList.remove("hidden");
+                }
+              } catch (err) {
+                console.error("Error unregistering:", err);
+                deleteBtn.disabled = false;
+                messageDiv.textContent = "Failed to unregister. Try again.";
+                messageDiv.className = "error";
+                messageDiv.classList.remove("hidden");
+              }
+            });
+
+            li.appendChild(deleteBtn);
+            participantsUl.appendChild(li);
+          });
+        }
 
         activitiesList.appendChild(activityCard);
 
@@ -62,6 +138,7 @@ document.addEventListener("DOMContentLoaded", () => {
         messageDiv.textContent = result.message;
         messageDiv.className = "success";
         signupForm.reset();
+        fetchActivities();
       } else {
         messageDiv.textContent = result.detail || "An error occurred";
         messageDiv.className = "error";
